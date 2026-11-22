@@ -34,14 +34,15 @@ push у main → GitHub Actions (.github/workflows/deploy.yml)
    заповнити `APP_URL`, `DB_*`. `APP_KEY` — у «Виконавці»: `key:generate`.
 7. **Розгортання** → вимкнути крок `package.json` (збірка вже в гілці), сценарій:
    ```
-   /opt/plesk/php/8.3/bin/php artisan migrate --force
+   /opt/plesk/php/8.3/bin/php artisan migrate --seed --force
    /opt/plesk/php/8.3/bin/php artisan filament:assets
    /opt/plesk/php/8.3/bin/php artisan optimize:clear
    /opt/plesk/php/8.3/bin/php artisan config:cache
    /opt/plesk/php/8.3/bin/php artisan route:cache
    /opt/plesk/php/8.3/bin/php artisan view:cache
    ```
-8. **Виконавець**: `storage:link`; першого адміна — `make:filament-user`.
+8. **Виконавець**: `storage:link`. Першого адміна створює `migrate --seed` із `ADMIN_EMAIL`/`ADMIN_PASSWORD` у `.env`
+   (лише якщо такого email ще немає).
 9. **Автоматичне розгортання**: «Розгортання» → режим **«Автоматичний»**, скопіювати URL
    вебхука (`https://…:8443/modules/git/public/web-hook.php?uuid=…`) → GitHub → Settings →
    Secrets and variables → Actions → New repository secret `PLESK_DEPLOY_WEBHOOK`.
@@ -56,3 +57,5 @@ push у main → GitHub Actions (.github/workflows/deploy.yml)
 - `https://ДОМЕН/build/commit.txt` = `git rev-parse origin/main`.
 - 404 на кроці вебхука = репозиторій у Plesk перестворено → оновити `PLESK_DEPLOY_WEBHOOK`.
 - Після зміни .env у Toolkit: «Виконавець» → `optimize:clear`, потім `config:cache`.
+- 500 на `/` і `/admin`, але `/up` = 200 → зазвичай закешований конфіг без `.env`
+  (розгортання пройшло до створення `.env`) або невірні `DB_*`. Виправити `.env` → «Розгорнути зараз».
