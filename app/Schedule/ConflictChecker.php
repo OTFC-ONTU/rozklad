@@ -2,8 +2,10 @@
 
 namespace App\Schedule;
 
+use App\Calendar\AcademicCalendar;
 use App\Enums\ConstraintLevel;
 use App\Enums\LessonFormat;
+use App\Enums\WeekParity;
 use App\Models\Discipline;
 use App\Models\Lesson;
 use App\Models\LessonParticipant;
@@ -13,15 +15,17 @@ use App\Models\SlotSetting;
 use App\Models\StudentGroup;
 use App\Models\Subgroup;
 use App\Models\Teacher;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
 /**
- * Перевіряє пару тижневого шаблону на конфлікти з рештою версії розкладу.
+ * Перевіряє пару тижневого шаблону на конфлікти з рештою версії розкладу,
+ * а заміну на дату — з рештою пар цього дня (і станом груп за графіком).
  * Жорсткі конфлікти блокують збереження, попередження — ні.
  *
- * Ще не перевіряється (потребує календаря, практик і навантаження):
- * група на практиці / сесії / канікулах, практики як зайнятість, відхилення від навантаження,
+ * Ще не перевіряється (потребує практик і навантаження):
+ * група на практиці в шаблоні, практики як зайнятість, відхилення від навантаження,
  * «вікна», ліміти пар викладача на день, переїзд між корпусами.
  */
 class ConflictChecker
@@ -31,10 +35,55 @@ class ConflictChecker
         'participants.group', 'participants.subgroup',
     ];
 
+    /** Перевірка пари тижневого шаблону проти решти версії. */
     public function check(LessonDraft $draft): ConflictReport
     {
-        $report = new ConflictReport;
         $version = ScheduleVersion::findOrFail($draft->versionId);
+
+        $sameDay = Lesson::query()
+            ->with(self::LESSON_RELATIONS)
+            ->where('schedule_version_id', $draft->versionId)
+            ->where('weekday', $draft->weekday)
+            ->whereIn('week', $draft->week->overlapping())
+            ->when($draft->lessonId, fn ($q, $id) => $q->whereKeyNot($id))
+            ->get();
+
+        return $this->run($draft, $sameDay, $version->effective_from, null);
+    }
+
+    /**
+     * Перевірка пари на конкретну дату (заміна, додаткова пара) проти всіх пар цього дня.
+     * День тижня і тип тижня чернетки беруться з календаря: «за розкладом іншого дня» враховано.
+     *
+     * @param  ?DayLesson  $editing  пара дня, яку редагують: вона не конфліктує сама з собою
+     */
+    public function checkOnDate(LessonDraft $draft, DayPlan $plan, ?DayLesson $editing = null): ConflictReport
+    {
+        $day = $plan->day;
+
+        if (! $day->isStudyDay) {
+            $report = new ConflictReport;
+            $report->hard('day_off', 'Цього дня занять немає.');
+
+            return $report;
+        }
+
+        $draft = $draft->with(weekday: $day->scheduleWeekday, week: $day->parity ?? WeekParity::Every);
+        $sameDay = new EloquentCollection($plan->active()
+            ->reject(fn (DayLesson $l) => $editing !== null && $l->key() === $editing->key())
+            ->map(fn (DayLesson $l) => $l->lesson)
+            ->all());
+
+        return $this->run($draft, $sameDay, $day->date, $plan);
+    }
+
+    /**
+     * @param  EloquentCollection<int, Lesson>  $sameDay  інші пари того самого дня, що можуть збігтися за тижнем
+     * @param  ?DayPlan  $plan  заданий для перевірки на конкретну дату
+     */
+    private function run(LessonDraft $draft, EloquentCollection $sameDay, CarbonInterface $date, ?DayPlan $plan): ConflictReport
+    {
+        $report = new ConflictReport;
 
         $participants = $this->participants($draft);
         $teachers = Teacher::with('constraints')->findMany($draft->teacherIds);
@@ -45,19 +94,23 @@ class ConflictChecker
             return $report;
         }
 
-        $concurrent = $this->concurrentLessons($draft);
+        $concurrent = $sameDay->filter(fn (Lesson $l) => $l->pair === $draft->pair)->values();
 
-        $this->checkSlots($draft, $participants, $version, $report);
+        if ($plan !== null) {
+            $this->checkGroupsStudy($participants, $plan, $report);
+        }
+
+        $this->checkSlots($draft, $participants, $date, $report);
         $this->checkGroups($participants, $concurrent, $report);
         $this->checkTeachers($teachers, $concurrent, $report);
-        $this->checkTeacherConstraints($draft, $teachers, $version, $report);
+        $this->checkTeacherConstraints($draft, $teachers, $date, $plan !== null, $report);
 
         if ($draft->format === LessonFormat::InPerson) {
             $this->checkRooms($participants, $rooms, $concurrent, $report);
             $this->checkRoomSuitability($discipline, $rooms, $report);
         }
 
-        $this->checkSameDisciplineTwice($draft, $participants, $report);
+        $this->checkSameDisciplineTwice($draft, $participants, $sameDay, $report);
 
         return $report;
     }
@@ -108,23 +161,21 @@ class ConflictChecker
         return ! $report->hasHard();
     }
 
-    /** @return EloquentCollection<int, Lesson> пари версії в той самий слот, що можуть збігтися за тижнем */
-    private function concurrentLessons(LessonDraft $draft): EloquentCollection
+    /** На дату: група на практиці, сесії, канікулах тощо. */
+    private function checkGroupsStudy(Collection $participants, DayPlan $plan, ConflictReport $report): void
     {
-        return Lesson::query()
-            ->with(self::LESSON_RELATIONS)
-            ->where('schedule_version_id', $draft->versionId)
-            ->where('weekday', $draft->weekday)
-            ->where('pair', $draft->pair)
-            ->whereIn('week', $draft->week->overlapping())
-            ->when($draft->lessonId, fn ($q, $id) => $q->whereKeyNot($id))
-            ->get();
+        $calendar = app(AcademicCalendar::class);
+
+        foreach ($participants->pluck('group')->unique('id') as $group) {
+            if (! $plan->groups->has($group->id)) {
+                $state = $calendar->groupStateOn($group, $plan->day->date);
+                $report->hard('group_not_studying', "{$group->code} цього дня: ".mb_strtolower($state->label()).'.');
+            }
+        }
     }
 
-    private function checkSlots(LessonDraft $draft, Collection $participants, ScheduleVersion $version, ConflictReport $report): void
+    private function checkSlots(LessonDraft $draft, Collection $participants, CarbonInterface $date, ConflictReport $report): void
     {
-        $date = $version->effective_from;
-
         $participants
             ->map(fn (LessonParticipant $p) => $p->group)
             ->unique('id')
@@ -172,13 +223,18 @@ class ConflictChecker
         }
     }
 
-    private function checkTeacherConstraints(LessonDraft $draft, EloquentCollection $teachers, ScheduleVersion $version, ConflictReport $report): void
+    /**
+     * @param  bool  $onDate  перевірка конкретної дати: тимчасове обмеження діє лише у свої дати
+     */
+    private function checkTeacherConstraints(LessonDraft $draft, EloquentCollection $teachers, CarbonInterface $date, bool $onDate, ConflictReport $report): void
     {
-        $date = $version->effective_from;
-
         foreach ($teachers as $teacher) {
             foreach ($teacher->constraints as $constraint) {
                 if (! $constraint->covers($draft->weekday, $draft->pair, $draft->week)) {
+                    continue;
+                }
+
+                if ($onDate && ! $constraint->activeOn($date)) {
                     continue;
                 }
 
@@ -252,23 +308,15 @@ class ConflictChecker
         }
     }
 
-    private function checkSameDisciplineTwice(LessonDraft $draft, Collection $participants, ConflictReport $report): void
+    private function checkSameDisciplineTwice(LessonDraft $draft, Collection $participants, EloquentCollection $sameDay, ConflictReport $report): void
     {
         if ($draft->disciplineId === null) {
             return;
         }
 
-        $sameDay = Lesson::query()
-            ->with(['discipline', 'participants.group', 'participants.subgroup'])
-            ->where('schedule_version_id', $draft->versionId)
-            ->where('weekday', $draft->weekday)
-            ->where('pair', '!=', $draft->pair)
-            ->where('discipline_id', $draft->disciplineId)
-            ->whereIn('week', $draft->week->overlapping())
-            ->when($draft->lessonId, fn ($q, $id) => $q->whereKeyNot($id))
-            ->get();
+        $others = $sameDay->filter(fn (Lesson $l) => $l->pair !== $draft->pair && $l->discipline_id === $draft->disciplineId);
 
-        foreach ($sameDay as $other) {
+        foreach ($others as $other) {
             $mine = $participants->first(
                 fn (LessonParticipant $m) => $other->participants->contains(fn ($p) => $m->overlapsWith($p))
             );

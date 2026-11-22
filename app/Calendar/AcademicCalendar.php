@@ -65,6 +65,29 @@ class AcademicCalendar
             ->first();
     }
 
+    /**
+     * Стан кожної групи на дату одним запитом.
+     *
+     * @param  iterable<StudentGroup>  $groups
+     * @return array<int, GroupActivityKind> id групи => стан
+     */
+    public function groupStatesOn(iterable $groups, CarbonInterface $date): array
+    {
+        $activities = GroupActivity::query()
+            ->whereDate('starts_on', '<=', $date)
+            ->whereDate('ends_on', '>=', $date)
+            ->get()
+            ->keyBy('student_group_id');
+        $default = $this->semesterFor($date) ? GroupActivityKind::Theory : GroupActivityKind::Vacation;
+
+        $states = [];
+        foreach ($groups as $group) {
+            $states[$group->id] = $activities->get($group->id)?->kind ?? $default;
+        }
+
+        return $states;
+    }
+
     /** Стан групи на дату: явний запис графіка, інакше теорія в семестрі й канікули поза ним. */
     public function groupStateOn(StudentGroup $group, CarbonInterface $date): GroupActivityKind
     {

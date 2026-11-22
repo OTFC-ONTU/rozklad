@@ -128,7 +128,7 @@ class AcademicCalendarTest extends TestCase
         $lesson(Weekday::Tuesday, 3, WeekParity::Denominator);
 
         $daily = app(DailySchedule::class);
-        $pairs = fn (string $date) => $daily->forGroup($group, $this->d($date))->pluck('pair')->all();
+        $pairs = fn (string $date) => $daily->forGroup($group, $this->d($date))->map->pair()->all();
 
         $this->assertSame([], $pairs('2026-09-01'), 'Чернетка ще не діє.');
 
