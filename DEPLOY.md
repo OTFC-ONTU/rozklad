@@ -10,8 +10,11 @@ push у main → GitHub Actions (.github/workflows/deploy.yml)
 → Plesk Laravel Toolkit: git pull plesk-build → composer install → сценарій розгортання
 ```
 
-На сервері немає Node, а SSH підписки — chroot із PHP 7.2, тому фронтенд збирає CI, а
-команди artisan запускає Toolkit через повний шлях до PHP 8.3. **Не комітьте в `plesk-build` вручну.**
+На сервері немає Node, а SSH підписки — chroot із PHP 7.2, тому фронтенд **і `vendor/`**
+збирає CI (обидва лежать у `plesk-build`), а команди artisan запускаються через повний шлях
+до PHP 8.3. Тому підходить і звичайне «Git»-сховище Plesk без Laravel Toolkit: шлях сервера
+`/rozklad.otfk.od.ua`, кореневий каталог документів домену — `/rozklad.otfk.od.ua/public`,
+`.env` — файлом `/rozklad.otfk.od.ua/.env` через «Файли». **Не комітьте в `plesk-build` вручну.**
 
 ## Одноразове налаштування
 
