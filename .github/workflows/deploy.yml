@@ -1,0 +1,94 @@
+name: Deploy
+
+# main → Plesk: збирає фронтенд і публікує гілку plesk-build (дерево main + public/build),
+# яку забирає Laravel Toolkit у Plesk (на сервері немає Node, а SSH — chroot без PHP 8.3).
+# Схема та сама, що й у OTFC-ONTU/otfk. Див. DEPLOY.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-plesk
+  cancel-in-progress: false
+
+jobs:
+  # Шлюз: без зелених тестів і чистого composer audit викладка не стартує.
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, bcmath, gd, zip, intl, fileinfo
+          coverage: none
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: composer audit --no-interaction --locked
+      - run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan test
+
+  deploy-plesk:
+    if: ${{ github.ref_name == 'main' }}
+    runs-on: ubuntu-latest
+    needs: tests
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # vendor/ потрібен, якщо тема адмінки імпортує CSS із vendor/filament
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - run: composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-progress
+
+      - run: npm ci
+      - run: npm run build
+
+      # Яка версія розгорнута: https://<домен>/build/commit.txt = SHA main
+      - run: echo "${{ github.sha }}" > public/build/commit.txt
+
+      # plesk-build = дерево main + public/build (у git він у .gitignore). Коміт має
+      # батьками попередній plesk-build і перевірений SHA main — гілка лише рухається
+      # вперед, тож Git у Plesk тягне її без force. Не комітьте в plesk-build вручну.
+      - name: Publish plesk-build
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f public/build
+          tree=$(git write-tree)
+          parents="-p ${{ github.sha }}"
+          if git fetch --quiet origin plesk-build; then
+            parents="-p $(git rev-parse FETCH_HEAD) $parents"
+          fi
+          commit=$(git commit-tree "$tree" $parents -m "build: main ${{ github.sha }}")
+          git push origin "$commit:refs/heads/plesk-build"
+          echo "::notice title=plesk-build::$commit (main ${{ github.sha }})"
+
+      # Розгортання у Plesk запускає вебхук Git-репозиторію Laravel Toolkit
+      # (секрет PLESK_DEPLOY_WEBHOOK). Без нього — «Розгорнути зараз» вручну в Plesk.
+      - name: Trigger Plesk deployment
+        env:
+          WEBHOOK: ${{ secrets.PLESK_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::notice title=Plesk::Секрет PLESK_DEPLOY_WEBHOOK не заданий — розгорніть plesk-build у Plesk вручну."
+            exit 0
+          fi
+          curl -fsS -X POST --retry 3 "$WEBHOOK" > /dev/null
