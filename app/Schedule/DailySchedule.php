@@ -11,6 +11,7 @@ use App\Models\LessonParticipant;
 use App\Models\ScheduleChange;
 use App\Models\ScheduleChangeParticipant;
 use App\Models\ScheduleVersion;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Teacher;
 use Carbon\CarbonInterface;
@@ -24,7 +25,7 @@ use Illuminate\Support\Collection;
 class DailySchedule
 {
     private const array LESSON_RELATIONS = [
-        'discipline', 'teachers', 'rooms.building', 'participants.group.shiftChanges', 'participants.subgroup',
+        'discipline', 'teachers', 'rooms.building', 'participants.group', 'participants.subgroup',
     ];
 
     public function __construct(private readonly AcademicCalendar $calendar) {}
@@ -35,7 +36,7 @@ class DailySchedule
         $date = $day->date;
         $version = ScheduleVersion::effectiveOn($date);
 
-        $groups = StudentGroup::with('shiftChanges')->get();
+        $groups = StudentGroup::all();
         $states = $this->calendar->groupStatesOn($groups, $date);
         $groups = $groups
             ->filter(fn (StudentGroup $g) => $day->isStudyDay && $states[$g->id]->hasClasses())
@@ -54,7 +55,7 @@ class DailySchedule
             : new EloquentCollection;
 
         $changes = ScheduleChange::query()
-            ->with(['discipline', 'teachers', 'rooms.building', 'participants.group.shiftChanges', 'participants.subgroup'])
+            ->with(['discipline', 'teachers', 'rooms.building', 'participants.group', 'participants.subgroup'])
             ->whereDate('date', $date)
             ->get();
 
@@ -86,6 +87,7 @@ class DailySchedule
             $lessons->sortBy(fn (DayLesson $l) => [$l->pair(), $l->lesson->participants->first()?->group?->code])->values(),
             $groups,
             $stale,
+            ShiftSetting::for($date),
         );
     }
 

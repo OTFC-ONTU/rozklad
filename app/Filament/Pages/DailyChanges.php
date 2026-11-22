@@ -7,7 +7,7 @@ use App\Enums\Shift;
 use App\Models\Discipline;
 use App\Models\Lesson;
 use App\Models\Room;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Subgroup;
 use App\Models\Teacher;
@@ -83,9 +83,12 @@ class DailyChanges extends Page
         }
     }
 
+    /** Обрана зміна; якщо цього дня вона не працює (2 зміну вимкнено) — 1. */
     public function currentShift(): Shift
     {
-        return Shift::from($this->shift);
+        $shift = Shift::from($this->shift);
+
+        return in_array($shift, $this->plan->shifts->activeShifts(), true) ? $shift : Shift::First;
     }
 
     #[Computed]
@@ -138,7 +141,7 @@ class DailyChanges extends Page
     /** @return list<int> */
     public function pairs(): array
     {
-        return range(1, SlotSetting::MAX_PAIRS);
+        return range(1, ShiftSetting::MAX_PAIRS);
     }
 
     public function changeDate(int $days): void
@@ -171,13 +174,13 @@ class DailyChanges extends Page
                 ->label('Листок обліку')
                 ->icon(Heroicon::OutlinedPrinter)
                 ->color('gray')
-                ->url(fn () => route('filament.admin.print.attendance', ['date' => $this->date, 'shift' => $this->shift]))
+                ->url(fn () => route('filament.admin.print.attendance', ['date' => $this->date, 'shift' => $this->currentShift()->value]))
                 ->openUrlInNewTab(),
             Action::make('changesSheet')
                 ->label('Листок змін')
                 ->icon(Heroicon::OutlinedPrinter)
                 ->color('gray')
-                ->url(fn () => route('filament.admin.print.changes', ['date' => $this->date, 'shift' => $this->shift]))
+                ->url(fn () => route('filament.admin.print.changes', ['date' => $this->date, 'shift' => $this->currentShift()->value]))
                 ->openUrlInNewTab(),
             $this->addLessonAction()->label('Додати пару')->icon(Heroicon::OutlinedPlus),
         ];
@@ -456,7 +459,7 @@ class DailyChanges extends Page
         $selected = array_map('intval', $get('groups') ?? []);
 
         return $this->plan->groups
-            ->filter(fn (StudentGroup $g) => $g->shiftOn($this->plan->day->date) === $this->currentShift() || in_array($g->id, $selected, true))
+            ->filter(fn (StudentGroup $g) => $this->plan->shiftOfGroup($g) === $this->currentShift() || in_array($g->id, $selected, true))
             ->sortBy(fn (StudentGroup $g) => [$busy->has($g->id), $g->code])
             ->mapWithKeys(fn (StudentGroup $g) => [$g->id => $g->code.($busy->has($g->id) ? ' — має пару' : '')])
             ->all();

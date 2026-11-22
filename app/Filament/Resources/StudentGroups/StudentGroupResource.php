@@ -2,13 +2,12 @@
 
 namespace App\Filament\Resources\StudentGroups;
 
-use App\Enums\Shift;
 use App\Filament\Resources\StudentGroups\Pages\ManageStudentGroups;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -40,12 +39,11 @@ class StudentGroupResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->columns(4)->components([
+        return $schema->columns(3)->components([
             TextInput::make('code')->label('Шифр')->required()->maxLength(16)->unique(ignoreRecord: true)
                 ->placeholder('4КГ-10'),
             Select::make('course')->label('Курс')->options([1 => 1, 2 => 2, 3 => 3, 4 => 4])->required(),
             TextInput::make('students_count')->label('Здобувачів')->numeric()->minValue(1),
-            Select::make('shift')->label('Зміна')->options(Shift::class)->default(Shift::First)->required(),
 
             Repeater::make('subgroups')
                 ->label('Підгрупи')
@@ -60,31 +58,22 @@ class StudentGroupResource extends Resource
                     TextInput::make('name')->label('Назва')->required()->maxLength(64)->placeholder('1'),
                     TextInput::make('students_count')->label('Здобувачів')->numeric()->minValue(1),
                 ]),
-
-            Repeater::make('shiftChanges')
-                ->label('Зміна на період')
-                ->helperText('З указаної дати група навчається в іншу зміну.')
-                ->relationship()
-                ->columnSpanFull()
-                ->columns(2)
-                ->defaultItems(0)
-                ->addActionLabel('Додати')
-                ->schema([
-                    DatePicker::make('effective_from')->label('З дати')->required(),
-                    Select::make('shift')->label('Зміна')->options(Shift::class)->required(),
-                ]),
         ]);
     }
 
     public static function table(Table $table): Table
     {
+        $shifts = ShiftSetting::for(today());
+
         return $table
             ->defaultSort('code')
             ->columns([
                 TextColumn::make('code')->label('Шифр')->searchable()->sortable(),
                 TextColumn::make('course')->label('Курс')->sortable(),
                 TextColumn::make('students_count')->label('Здобувачів'),
-                TextColumn::make('shift')->label('Зміна')->badge(),
+                TextColumn::make('shift')->label('Зміна')->badge()
+                    ->tooltip('За курсом, див. «Зміни»')
+                    ->state(fn (StudentGroup $record) => $shifts->scheduledShift($record->course)),
                 TextColumn::make('subgroups_count')->label('Підгруп')->counts('subgroups'),
             ])
             ->filters([

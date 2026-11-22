@@ -6,7 +6,7 @@ use App\Enums\ConstraintLevel;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Filament\Resources\Teachers\Pages\ManageTeachers;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\Teacher;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -56,7 +56,7 @@ class TeacherResource extends Resource
                 ->schema([
                     Select::make('weekday')->label('День')->options(Weekday::class)->required(),
                     Select::make('pair')->label('Пара')->placeholder('Увесь день')
-                        ->options(array_combine(range(1, SlotSetting::MAX_PAIRS), range(1, SlotSetting::MAX_PAIRS))),
+                        ->options(array_combine(range(1, ShiftSetting::MAX_PAIRS), range(1, ShiftSetting::MAX_PAIRS))),
                     Select::make('week')->label('Тиждень')->options(WeekParity::class)->default(WeekParity::Every)->required(),
                     Select::make('level')->label('Рівень')->options(ConstraintLevel::class)->default(ConstraintLevel::Forbidden)->required(),
                     DatePicker::make('starts_on')->label('З дати'),

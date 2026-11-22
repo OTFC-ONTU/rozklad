@@ -9,7 +9,7 @@ use App\Filament\Resources\Buildings\BuildingResource;
 use App\Filament\Resources\Disciplines\DisciplineResource;
 use App\Filament\Resources\Rooms\RoomResource;
 use App\Filament\Resources\ScheduleVersions\ScheduleVersionResource;
-use App\Filament\Resources\SlotSettings\SlotSettingResource;
+use App\Filament\Resources\ShiftSettings\ShiftSettingResource;
 use App\Filament\Resources\StudentGroups\StudentGroupResource;
 use App\Filament\Resources\Teachers\TeacherResource;
 use App\Models\Discipline;
@@ -46,7 +46,7 @@ class ScheduleGridTest extends TestCase
 
         foreach ([
             BuildingResource::class, RoomResource::class, DisciplineResource::class, TeacherResource::class,
-            StudentGroupResource::class, ScheduleVersionResource::class, SlotSettingResource::class,
+            StudentGroupResource::class, ScheduleVersionResource::class, ShiftSettingResource::class,
         ] as $resource) {
             $this->get($resource::getUrl())->assertOk();
         }
