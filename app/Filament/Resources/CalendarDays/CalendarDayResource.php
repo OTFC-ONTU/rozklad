@@ -44,8 +44,8 @@ class CalendarDayResource extends Resource
         return $schema->components([
             DatePicker::make('date')->label('Дата')->required()->unique(ignoreRecord: true),
             Select::make('kind')->label('Тип')->options(CalendarDayKind::class)->required()->live(),
-            Select::make('follows_weekday')->label('За розкладом дня')->options(Weekday::class)
-                ->placeholder('Свого дня тижня')->visible($isWorking),
+            Select::make('follows_weekday')->label('За розкладом дня')->options(Weekday::schoolDayOptions())->enum(Weekday::class)
+                ->placeholder('Свого дня (субота — за чергуванням)')->visible($isWorking),
             Select::make('follows_parity')->label('Тиждень')->placeholder('За календарем')->visible($isWorking)
                 ->options([WeekParity::Numerator->value => 'Чисельник', WeekParity::Denominator->value => 'Знаменник']),
             TextInput::make('note')->label('Примітка')->maxLength(255)->placeholder('День Незалежності'),
@@ -56,7 +56,7 @@ class CalendarDayResource extends Resource
     {
         return $table
             ->defaultSort('date', 'desc')
-            ->description('Свята та неробочі дні; робочі дні «за розкладом іншого дня» (наприклад, субота за вівторком).')
+            ->description('Свята та неробочі дні; робочі дні «за розкладом іншого дня». Навчальні суботи відмічають у семестрі.')
             ->columns([
                 TextColumn::make('date')->label('Дата')->date('D, d.m.Y')->sortable(),
                 TextColumn::make('kind')->label('Тип')->badge()

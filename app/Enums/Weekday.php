@@ -5,7 +5,8 @@ namespace App\Enums;
 use Filament\Support\Contracts\HasLabel;
 
 /**
- * Навчальні дні: Пн–Пт завжди, субота — якщо увімкнена для зміни.
+ * Розклад складається на Пн–Пт; навчальна субота йде за розкладом одного з цих днів
+ * (див. Semester::saturdayWeekday). Субота лишається як календарний день.
  * Значення збігаються з ISO-8601 (Carbon::dayOfWeekIso).
  */
 enum Weekday: int implements HasLabel
@@ -16,6 +17,18 @@ enum Weekday: int implements HasLabel
     case Thursday = 4;
     case Friday = 5;
     case Saturday = 6;
+
+    /** @return list<self> дні, на які складається розклад */
+    public static function schoolDays(): array
+    {
+        return [self::Monday, self::Tuesday, self::Wednesday, self::Thursday, self::Friday];
+    }
+
+    /** @return array<int, string> Пн–Пт для вибору у формах */
+    public static function schoolDayOptions(): array
+    {
+        return collect(self::schoolDays())->mapWithKeys(fn (self $d) => [$d->value => $d->label()])->all();
+    }
 
     public function getLabel(): string
     {

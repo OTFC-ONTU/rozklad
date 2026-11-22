@@ -19,8 +19,7 @@ class ManageShiftSettings extends ManageRecords
             CreateAction::make()->fillForm(fn () => [
                 ...(ShiftSetting::newest() ?? new ShiftSetting)->only([
                     'second_shift_courses', 'second_shift_enabled',
-                    'first_saturday_enabled', 'first_fourth_pair_enabled',
-                    'second_saturday_enabled', 'second_fourth_pair_enabled',
+                    'first_fourth_pair_enabled', 'second_fourth_pair_enabled',
                 ]),
                 'effective_from' => today()->toDateString(),
             ]),

@@ -40,14 +40,29 @@ class AcademicCalendar
             return new CalendarDate($date, $semester, false, null, $parity, note: $special?->note);
         }
 
+        $isSaturday = $date->dayOfWeekIso === 6;
+
         if ($special?->kind === CalendarDayKind::Working) {
-            $weekday = $special->follows_weekday ?? Weekday::tryFrom($date->dayOfWeekIso);
+            // Робоча субота без указаного дня — за чергуванням субот; змін не відмічено — навчаються всі.
+            $weekday = $special->follows_weekday
+                ?? ($isSaturday ? $semester->saturdayWeekday($date) : Weekday::tryFrom($date->dayOfWeekIso));
+            $shifts = $isSaturday ? ($semester->saturdayShifts($date) ?: null) : null;
 
             return new CalendarDate(
                 $date, $semester, $weekday !== null, $weekday, $special->follows_parity ?? $parity,
-                isRescheduled: $special->follows_weekday !== null || $special->follows_parity !== null,
+                isRescheduled: $isSaturday || $special->follows_weekday !== null || $special->follows_parity !== null,
                 note: $special->note,
+                shifts: $shifts,
             );
+        }
+
+        // Субота навчальна лише для змін, відмічених у семестрі; йде за розкладом дня з чергування.
+        if ($isSaturday) {
+            $shifts = $semester->saturdayShifts($date);
+
+            return $shifts === []
+                ? new CalendarDate($date, $semester, false, null, $parity)
+                : new CalendarDate($date, $semester, true, $semester->saturdayWeekday($date), $parity, isRescheduled: true, shifts: $shifts);
         }
 
         $weekday = Weekday::tryFrom($date->dayOfWeekIso); // неділя → null

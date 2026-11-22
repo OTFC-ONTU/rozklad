@@ -6,6 +6,7 @@ use App\Calendar\AcademicCalendar;
 use App\Enums\CalendarDayKind;
 use App\Enums\GroupActivityKind;
 use App\Enums\ScheduleVersionStatus;
+use App\Enums\Shift;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Models\AcademicYear;
@@ -83,7 +84,7 @@ class AcademicCalendarTest extends TestCase
         $this->assertFalse($c->day($this->d('2026-10-14'))->isStudyDay);
         $this->assertSame(WeekParity::Numerator, $c->day($this->d('2026-10-14'))->parity, 'Тип тижня видно і у свято.');
         $this->assertFalse($c->day($this->d('2027-01-05'))->isStudyDay);
-        $this->assertTrue($c->day($this->d('2026-09-05'))->isStudyDay, 'Субота — навчальний день; чи є пари, вирішують слоти зміни.');
+        $this->assertFalse($c->day($this->d('2026-09-05'))->isStudyDay, 'Невідмічена субота — вихідна.');
     }
 
     public function test_day_follows_schedule_of_another_day(): void
@@ -100,6 +101,36 @@ class AcademicCalendarTest extends TestCase
         $this->assertSame(Weekday::Tuesday, $day->scheduleWeekday);
         $this->assertSame(WeekParity::Denominator, $day->parity);
         $this->assertSame('Субота 21.11.2026 — за розкладом: вівторок, знаменник', $day->describe());
+    }
+
+    public function test_saturdays_rotate_by_calendar_and_study_only_when_marked(): void
+    {
+        // Суботи семестру: 05.09, 12.09, 19.09, 26.09, 03.10, 10.10…
+        $this->semester->update([
+            'first_saturday_weekday' => Weekday::Tuesday,
+            'first_shift_saturdays' => ['2026-09-05', '2026-10-10'],
+            'second_shift_saturdays' => ['2026-10-10'],
+        ]);
+        $c = $this->calendar();
+
+        $this->assertSame(Weekday::Tuesday, $this->semester->saturdayWeekday($this->d('2026-09-05')));
+        $this->assertSame(Weekday::Friday, $this->semester->saturdayWeekday($this->d('2026-09-26')));
+        $this->assertSame(Weekday::Monday, $this->semester->saturdayWeekday($this->d('2026-10-03')), 'Після п\'ятниці — знову понеділок.');
+
+        $first = $c->day($this->d('2026-09-05'));
+        $this->assertTrue($first->isStudyDay);
+        $this->assertSame(Weekday::Tuesday, $first->scheduleWeekday);
+        $this->assertTrue($first->hasShift(Shift::First));
+        $this->assertFalse($first->hasShift(Shift::Second));
+        $this->assertSame('Субота 05.09.2026 — за розкладом: вівторок, чисельник, лише 1 зміна', $first->describe());
+
+        $this->assertFalse($c->day($this->d('2026-09-12'))->isStudyDay, 'Пропущена субота — вихідна…');
+        $both = $c->day($this->d('2026-10-10'));
+        $this->assertSame(Weekday::Tuesday, $both->scheduleWeekday, '…але свій день у черзі «забирає».');
+        $this->assertTrue($both->hasShift(Shift::Second));
+
+        CalendarDay::create(['date' => '2026-10-10', 'kind' => CalendarDayKind::Holiday]);
+        $this->assertFalse($c->day($this->d('2026-10-10'))->isStudyDay, 'Свято важливіше за відмітку.');
     }
 
     public function test_group_state_defaults_and_periods(): void

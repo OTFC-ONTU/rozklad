@@ -2,20 +2,25 @@
 
 namespace App\Filament\Resources\Semesters;
 
+use App\Enums\CalendarDayKind;
+use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Filament\Resources\Semesters\Pages\ManageSemesters;
+use App\Models\CalendarDay;
 use App\Models\Semester;
 use App\Models\WeekParityOverride;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
@@ -71,7 +76,74 @@ class SemesterResource extends Resource
             View::make('filament.resources.semesters.weeks-preview')
                 ->columnSpanFull()
                 ->viewData(fn (Get $get) => ['weeks' => self::previewWeeks($get)]),
+            Section::make('Навчальні суботи')
+                ->description('Розклад складається на Пн–Пт. Субота йде за розкладом дня по колу Пн→Пт за календарем: '
+                    .'вихідна субота теж «забирає» свій день. Невідмічена субота — вихідна для зміни.')
+                ->columnSpanFull()
+                ->collapsible()
+                ->columns(2)
+                ->schema([
+                    Select::make('first_saturday_weekday')->label('Перша субота семестру — за розкладом')
+                        ->options(Weekday::schoolDayOptions())->default(Weekday::Monday->value)->required()->live()
+                        ->columnSpanFull(),
+                    self::saturdayList('first_shift_saturdays', '1 зміна'),
+                    self::saturdayList('second_shift_saturdays', '2 зміна'),
+                ]),
         ]);
+    }
+
+    private static function saturdayList(string $name, string $label): CheckboxList
+    {
+        return CheckboxList::make($name)->label($label)
+            ->options(fn (Get $get) => array_map(fn (array $s) => $s['label'], self::previewSaturdays($get)))
+            ->disableOptionWhen(fn (Get $get, string $value) => self::previewSaturdays($get)[$value]['holiday'] ?? false)
+            ->columns(2)
+            ->gridDirection('row')
+            ->bulkToggleable()
+            ->default([]);
+    }
+
+    /**
+     * Суботи семестру з днем, за розкладом якого вони йдуть, і позначкою свят.
+     *
+     * @return array<string, array{label: string, holiday: bool}> Y-m-d => …
+     */
+    private static function previewSaturdays(Get $get): array
+    {
+        try {
+            $semester = new Semester([
+                'starts_on' => $get('starts_on'),
+                'ends_on' => $get('ends_on'),
+                'first_saturday_weekday' => $get('first_saturday_weekday') ?: Weekday::Monday,
+            ]);
+
+            if (! $semester->starts_on || ! $semester->ends_on || $semester->ends_on->lt($semester->starts_on)) {
+                return [];
+            }
+        } catch (Throwable) {
+            return [];
+        }
+
+        $saturdays = $semester->saturdays();
+        $special = CalendarDay::query()
+            ->whereIn('date', array_map(fn (CarbonImmutable $d) => $d->toDateString(), $saturdays))
+            ->get()
+            ->keyBy(fn (CalendarDay $d) => $d->date->toDateString());
+
+        $result = [];
+        foreach ($saturdays as $saturday) {
+            $key = $saturday->toDateString();
+            $day = $special->get($key);
+            $holiday = $day?->kind === CalendarDayKind::Holiday;
+            $weekday = $day?->follows_weekday ?? $semester->saturdayWeekday($saturday);
+
+            $result[$key] = [
+                'label' => $saturday->format('d.m').' — '.($holiday ? 'свято' : 'за '.mb_strtolower($weekday->shortLabel())),
+                'holiday' => $holiday,
+            ];
+        }
+
+        return $result;
     }
 
     /**
@@ -124,6 +196,8 @@ class SemesterResource extends Resource
                 TextColumn::make('current')->label('Цей тиждень')->badge()->placeholder('—')
                     ->state(fn (Semester $s) => $s->contains(now()) ? $s->parityOn(now())->label() : null),
                 TextColumn::make('parity_overrides_count')->label('Перевизначень')->counts('parityOverrides'),
+                TextColumn::make('saturdays')->label('Навч. суботи (1 / 2 зм.)')
+                    ->state(fn (Semester $record) => count($record->first_shift_saturdays ?? []).' / '.count($record->second_shift_saturdays ?? [])),
             ])
             ->recordActions([EditAction::make()->modalWidth('4xl'), DeleteAction::make()]);
     }

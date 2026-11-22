@@ -3,6 +3,7 @@
 namespace Tests\Feature\Filament;
 
 use App\Enums\GroupActivityKind;
+use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Filament\Pages\EducationalProcessChart;
 use App\Filament\Resources\AcademicYears\AcademicYearResource;
@@ -20,6 +21,7 @@ use App\Models\User;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\Testing\TestAction;
+use Filament\Forms\Components\CheckboxList;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -60,6 +62,25 @@ class CalendarAdminTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame('2026-10-05', $semester->parityOverrides()->sole()->week_start->toDateString());
+    }
+
+    public function test_semester_saturdays_are_picked_per_shift(): void
+    {
+        $semester = $this->year->semesters()->first();
+        $options = fn (array $expected) => fn (CheckboxList $list) => array_intersect_key($list->getOptions(), $expected) === $expected;
+
+        Livewire::test(ManageSemesters::class)
+            ->mountAction(TestAction::make(EditAction::getDefaultName())->table($semester))
+            ->assertSchemaComponentExists('first_shift_saturdays', 'mountedActionSchema0', $options(['2026-09-05' => '05.09 — за пн', '2026-09-12' => '12.09 — за вт']))
+            ->fillForm(['first_saturday_weekday' => 3, 'first_shift_saturdays' => ['2026-09-05'], 'second_shift_saturdays' => ['2026-09-12']])
+            ->assertSchemaComponentExists('second_shift_saturdays', 'mountedActionSchema0', $options(['2026-09-05' => '05.09 — за ср']))
+            ->callMountedAction()
+            ->assertHasNoFormErrors();
+
+        $semester->refresh();
+        $this->assertSame(['2026-09-05'], $semester->first_shift_saturdays);
+        $this->assertSame(['2026-09-12'], $semester->second_shift_saturdays);
+        $this->assertSame(Weekday::Wednesday, $semester->first_saturday_weekday);
     }
 
     public function test_period_is_created_for_several_groups_and_overlaps_are_rejected(): void

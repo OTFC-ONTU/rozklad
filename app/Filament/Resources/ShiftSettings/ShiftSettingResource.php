@@ -12,7 +12,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -48,14 +47,8 @@ class ShiftSettingResource extends Resource
                 ->columnSpanFull()
                 ->helperText('Вимкніть, коли всі групи тимчасово навчаються в 1 зміну (напр., 4 курс на практиці). '
                     .'Тижневий розклад при цьому не змінюється.'),
-            Fieldset::make('1 зміна')->schema([
-                Toggle::make('first_saturday_enabled')->label('Субота'),
-                Toggle::make('first_fourth_pair_enabled')->label('4-а пара')->default(true),
-            ]),
-            Fieldset::make('2 зміна')->schema([
-                Toggle::make('second_saturday_enabled')->label('Субота'),
-                Toggle::make('second_fourth_pair_enabled')->label('4-а пара')->default(true),
-            ]),
+            Toggle::make('first_fourth_pair_enabled')->label('4-а пара в 1 зміні')->default(true),
+            Toggle::make('second_fourth_pair_enabled')->label('4-а пара в 2 зміні')->default(true),
         ]);
     }
 
@@ -65,15 +58,13 @@ class ShiftSettingResource extends Resource
 
         return $table
             ->defaultSort('effective_from', 'desc')
-            ->description('Змін завжди дві; діє останній запис на дату. Без записів усі курси в 1 зміні, субота вимкнена, 4-а пара увімкнена.')
+            ->description('Змін завжди дві; діє останній запис на дату. Без записів усі курси в 1 зміні, 4-а пара увімкнена. Навчальні суботи — у семестрі.')
             ->columns([
                 TextColumn::make('effective_from')->label('Діє з')->date('d.m.Y')->sortable(),
                 TextColumn::make('first_courses')->label('Курси 1 зміни')->state($courses(Shift::First)),
                 TextColumn::make('second_courses')->label('Курси 2 зміни')->state($courses(Shift::Second)),
                 IconColumn::make('second_shift_enabled')->label('2 зміна працює')->boolean(),
-                IconColumn::make('first_saturday_enabled')->label('Субота (1)')->boolean(),
                 IconColumn::make('first_fourth_pair_enabled')->label('4-а пара (1)')->boolean(),
-                IconColumn::make('second_saturday_enabled')->label('Субота (2)')->boolean(),
                 IconColumn::make('second_fourth_pair_enabled')->label('4-а пара (2)')->boolean(),
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()]);

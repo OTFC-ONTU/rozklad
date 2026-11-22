@@ -14,6 +14,7 @@ use App\Models\Lesson;
 use App\Models\Room;
 use App\Models\ScheduleChange;
 use App\Models\ScheduleVersion;
+use App\Models\Semester;
 use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Teacher;
@@ -214,6 +215,25 @@ class DailyChangesPageTest extends TestCase
             ->assertSee('Кривченко Ю.В.');
 
         $this->get(route('filament.admin.print.changes', ['date' => self::MONDAY, 'shift' => 2]))->assertNotFound();
+    }
+
+    public function test_saturday_follows_weekday_for_marked_shift_only(): void
+    {
+        ShiftSetting::create(['effective_from' => '2026-09-01', 'second_shift_courses' => [3]]);
+        // 28.11 — 13-та субота від 05.09: Пн + 12 по колу Пн–Пт = середа; відмічаємо 05.12 — четвер… беремо явно понеділок.
+        $semester = Semester::sole();
+        $saturday = collect($semester->saturdays())->first(fn ($d) => $semester->saturdayWeekday($d) === Weekday::Monday && $d->gt(CarbonImmutable::parse(self::MONDAY)));
+        $semester->update(['second_shift_saturdays' => [$saturday->toDateString()]]);
+
+        $plan = app(DailySchedule::class)->plan($saturday);
+
+        $this->assertSame(Weekday::Monday, $plan->day->scheduleWeekday);
+        $this->assertSame(['4КГ-12'], $plan->groups->pluck('code')->all(), 'Лише 2 зміна (3 курс).');
+        $this->assertSame(['4КГ-12'], $plan->active()->flatMap(fn ($l) => $l->lesson->participants->pluck('group.code'))->all());
+
+        Livewire::test(DailyChanges::class, ['date' => $saturday->toDateString(), 'shift' => 1])
+            ->assertSee('за розкладом: понеділок')
+            ->assertSee('Шувалова І.О.');
     }
 
     public function test_print_requires_login(): void

@@ -157,17 +157,21 @@ class ConflictCheckerTest extends TestCase
         ]));
     }
 
-    public function test_saturday_and_fourth_pair_follow_settings_of_course_shift(): void
+    public function test_fourth_pair_follows_settings_of_course_shift(): void
     {
         $group = StudentGroup::factory()->create(['course' => 3]);
         ShiftSetting::create(['effective_from' => '2026-09-01', 'second_shift_courses' => [3], 'second_fourth_pair_enabled' => false]);
+        ShiftSetting::create(['effective_from' => '2026-08-01', 'second_shift_courses' => [3]]);
 
-        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'weekday' => Weekday::Saturday]));
-        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]));
-
-        ShiftSetting::create(['effective_from' => '2026-08-01', 'second_shift_courses' => [3], 'second_saturday_enabled' => true]);
-        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'weekday' => Weekday::Saturday]),
+        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]),
             'Діє найновіший запис на дату версії, а не будь-який.');
+    }
+
+    public function test_template_is_monday_to_friday(): void
+    {
+        $group = StudentGroup::factory()->create();
+
+        $this->assertContains('invalid_weekday', $this->codes(['participants' => [[$group->id, null]], 'weekday' => Weekday::Saturday]));
     }
 
     public function test_other_courses_use_first_shift_settings(): void
