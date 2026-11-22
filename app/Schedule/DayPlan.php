@@ -6,6 +6,7 @@ use App\Calendar\CalendarDate;
 use App\Enums\Shift;
 use App\Models\ScheduleChange;
 use App\Models\ScheduleVersion;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use Illuminate\Support\Collection;
 
@@ -16,6 +17,7 @@ final readonly class DayPlan
      * @param  Collection<int, DayLesson>  $lessons  разом зі скасованими, відсортовані за парою
      * @param  Collection<int, StudentGroup>  $groups  групи, у яких цього дня є заняття, з id як ключем
      * @param  Collection<int, ScheduleChange>  $staleChanges  заміни пар, яких уже немає в шаблоні на цей день
+     * @param  ShiftSetting  $shifts  налаштування змін, що діють цього дня
      */
     public function __construct(
         public CalendarDate $day,
@@ -23,6 +25,7 @@ final readonly class DayPlan
         public Collection $lessons,
         public Collection $groups,
         public Collection $staleChanges,
+        public ShiftSetting $shifts,
     ) {}
 
     /** @return Collection<int, DayLesson> пари, що відбуваються (без скасованих) */
@@ -48,12 +51,18 @@ final readonly class DayPlan
         return $this->lessons->filter(fn (DayLesson $l) => $l->hasTeacher($teacherId))->values();
     }
 
+    /** Фактична зміна групи цього дня (з урахуванням вимкненої 2 зміни). */
+    public function shiftOfGroup(StudentGroup $group): Shift
+    {
+        return $this->shifts->shiftOf($group->course);
+    }
+
     /** Зміна пари — за першою групою (потоки складають з груп однієї зміни). */
     public function shiftOf(DayLesson $lesson): ?Shift
     {
         $group = $lesson->lesson->participants->first()?->group;
 
-        return $group?->shiftOn($this->day->date);
+        return $group ? $this->shiftOfGroup($group) : null;
     }
 
     /** @return Collection<int, DayLesson> */
@@ -65,6 +74,6 @@ final readonly class DayPlan
     /** @return Collection<int, StudentGroup> групи зміни, у яких цього дня є заняття */
     public function groupsInShift(Shift $shift): Collection
     {
-        return $this->groups->filter(fn (StudentGroup $g) => $g->shiftOn($this->day->date) === $shift)->sortBy('code')->values();
+        return $this->groups->filter(fn (StudentGroup $g) => $this->shiftOfGroup($g) === $shift)->sortBy('code')->values();
     }
 }

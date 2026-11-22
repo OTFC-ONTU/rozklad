@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Shift;
 use App\Enums\WeekParity;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Teacher;
 use App\Schedule\DailySchedule;
@@ -65,7 +65,12 @@ class DailySheetController extends Controller
         $parsed = CarbonImmutable::createFromFormat('!Y-m-d', $date);
         abort_if($parsed === false || $parsed->toDateString() !== $date, 404);
 
-        return [$this->daily->plan($parsed), Shift::tryFrom($shift) ?? abort(404)];
+        $plan = $this->daily->plan($parsed);
+        $shift = Shift::tryFrom($shift) ?? abort(404);
+        // Коли 2 зміну вимкнено, її групи цього дня в листках 1 зміни.
+        abort_unless(in_array($shift, $plan->shifts->activeShifts(), true), 404);
+
+        return [$plan, $shift];
     }
 
     private function header(DayPlan $plan, Shift $shift): array
@@ -75,7 +80,7 @@ class DailySheetController extends Controller
         return [
             'plan' => $plan,
             'shift' => $shift,
-            'pairs' => range(1, SlotSetting::MAX_PAIRS),
+            'pairs' => range(1, ShiftSetting::MAX_PAIRS),
             'dayName' => mb_convert_case($day->date->locale('uk')->dayName, MB_CASE_TITLE),
             'dateText' => $day->date->format('d.m.Y'),
             // «по чисельнику» / «по знаменнику»

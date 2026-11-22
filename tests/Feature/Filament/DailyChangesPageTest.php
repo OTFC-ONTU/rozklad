@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament;
 
 use App\Enums\DayLessonStatus;
 use App\Enums\ScheduleVersionStatus;
+use App\Enums\Shift;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Filament\Pages\DailyChanges;
@@ -13,6 +14,7 @@ use App\Models\Lesson;
 use App\Models\Room;
 use App\Models\ScheduleChange;
 use App\Models\ScheduleVersion;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Teacher;
 use App\Models\User;
@@ -52,8 +54,8 @@ class DailyChangesPageTest extends TestCase
         $year->semesters()->create(['number' => 1, 'starts_on' => '2026-09-01', 'ends_on' => '2026-12-31', 'first_week_parity' => WeekParity::Numerator]);
         $version = ScheduleVersion::factory()->create(['effective_from' => '2026-09-01', 'status' => ScheduleVersionStatus::Published]);
 
-        $this->group = StudentGroup::factory()->create(['code' => '4КГ-10']);
-        $this->other = StudentGroup::factory()->create(['code' => '4КГ-12']);
+        $this->group = StudentGroup::factory()->create(['code' => '4КГ-10', 'course' => 4]);
+        $this->other = StudentGroup::factory()->create(['code' => '4КГ-12', 'course' => 3]);
         $this->teacher = Teacher::factory()->create(['short_name' => 'Кривченко Ю.В.']);
         $this->colleague = Teacher::factory()->create(['short_name' => 'Шувалова І.О.']);
         $this->os = Discipline::factory()->create(['short_name' => 'Опер. системи']);
@@ -184,6 +186,34 @@ class DailyChangesPageTest extends TestCase
             ->assertDontSee('4КГ-12');
 
         $this->get(route('filament.admin.print.changes', ['date' => '2026-13-45', 'shift' => 1]))->assertNotFound();
+    }
+
+    public function test_courses_are_split_between_shifts(): void
+    {
+        ShiftSetting::create(['effective_from' => '2026-09-01', 'second_shift_courses' => [3]]);
+        $plan = app(DailySchedule::class)->plan(CarbonImmutable::parse(self::MONDAY));
+
+        $this->assertSame(['4КГ-10'], $plan->groupsInShift(Shift::First)->pluck('code')->all());
+        $this->assertSame(['4КГ-12'], $plan->groupsInShift(Shift::Second)->pluck('code')->all());
+        $this->get(route('filament.admin.print.changes', ['date' => self::MONDAY, 'shift' => 2]))->assertOk();
+    }
+
+    public function test_disabled_second_shift_moves_everyone_to_first(): void
+    {
+        ShiftSetting::create(['effective_from' => '2026-09-01', 'second_shift_courses' => [3]]);
+        ShiftSetting::create(['effective_from' => '2026-11-16', 'second_shift_courses' => [3], 'second_shift_enabled' => false]);
+        $plan = app(DailySchedule::class)->plan(CarbonImmutable::parse(self::MONDAY));
+
+        $this->assertSame(['4КГ-10', '4КГ-12'], $plan->groupsInShift(Shift::First)->pluck('code')->all());
+        $this->assertCount(2, $plan->inShift(Shift::First));
+        $this->assertTrue($plan->inShift(Shift::Second)->isEmpty());
+
+        Livewire::test(DailyChanges::class, ['date' => self::MONDAY, 'shift' => 2])
+            ->assertSee('2 зміна цього дня вимкнена')
+            ->assertSee('Шувалова І.О.')
+            ->assertSee('Кривченко Ю.В.');
+
+        $this->get(route('filament.admin.print.changes', ['date' => self::MONDAY, 'shift' => 2]))->assertNotFound();
     }
 
     public function test_print_requires_login(): void

@@ -5,13 +5,12 @@ namespace Tests\Feature\Schedule;
 use App\Enums\ConstraintLevel;
 use App\Enums\LessonFormat;
 use App\Enums\RoomType;
-use App\Enums\Shift;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Models\Discipline;
 use App\Models\Room;
 use App\Models\ScheduleVersion;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Subgroup;
 use App\Models\Teacher;
@@ -158,26 +157,37 @@ class ConflictCheckerTest extends TestCase
         ]));
     }
 
-    public function test_saturday_and_fourth_pair_follow_slot_settings_of_group_shift(): void
+    public function test_saturday_and_fourth_pair_follow_settings_of_course_shift(): void
     {
-        $group = StudentGroup::factory()->create(['shift' => Shift::Second]);
-        SlotSetting::create(['shift' => Shift::Second, 'effective_from' => '2026-09-01', 'fourth_pair_enabled' => false]);
+        $group = StudentGroup::factory()->create(['course' => 3]);
+        ShiftSetting::create(['effective_from' => '2026-09-01', 'second_shift_courses' => [3], 'second_fourth_pair_enabled' => false]);
 
         $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'weekday' => Weekday::Saturday]));
         $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]));
 
-        SlotSetting::create(['shift' => Shift::Second, 'effective_from' => '2026-08-01', 'saturday_enabled' => true]);
+        ShiftSetting::create(['effective_from' => '2026-08-01', 'second_shift_courses' => [3], 'second_saturday_enabled' => true]);
         $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'weekday' => Weekday::Saturday]),
             'Діє найновіший запис на дату версії, а не будь-який.');
     }
 
-    public function test_group_shift_change_on_date_is_used(): void
+    public function test_other_courses_use_first_shift_settings(): void
     {
-        $group = StudentGroup::factory()->create(['shift' => Shift::First]);
-        $group->shiftChanges()->create(['effective_from' => '2026-08-25', 'shift' => Shift::Second]);
-        SlotSetting::create(['shift' => Shift::Second, 'effective_from' => '2026-01-01', 'fourth_pair_enabled' => false]);
+        $group = StudentGroup::factory()->create(['course' => 1]);
+        ShiftSetting::create(['effective_from' => '2026-01-01', 'second_shift_courses' => [3], 'second_fourth_pair_enabled' => false]);
 
-        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]));
+        $this->assertNotContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]));
+    }
+
+    public function test_template_keeps_scheduled_shift_when_second_shift_is_off(): void
+    {
+        $group = StudentGroup::factory()->create(['course' => 3]);
+        ShiftSetting::create([
+            'effective_from' => '2026-01-01', 'second_shift_courses' => [3], 'second_shift_enabled' => false,
+            'second_fourth_pair_enabled' => false,
+        ]);
+
+        $this->assertContains('slot_disabled', $this->codes(['participants' => [[$group->id, null]], 'pair' => 4]),
+            'Вимкнення 2 зміни не змінює тижневий розклад.');
     }
 
     public function test_fixed_block_occupies_the_slot(): void

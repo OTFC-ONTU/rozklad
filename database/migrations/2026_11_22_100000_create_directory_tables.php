@@ -54,19 +54,8 @@ return new class extends Migration
             $table->string('code', 16)->unique();
             $table->unsignedTinyInteger('course');
             $table->unsignedSmallInteger('students_count')->nullable();
-            // Зміна за замовчуванням; зміни на період — у student_group_shifts.
-            $table->unsignedTinyInteger('shift')->default(1);
+            // Зміну визначає курс — див. shift_settings.
             $table->timestamps();
-        });
-
-        Schema::create('student_group_shifts', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('student_group_id')->constrained()->cascadeOnDelete();
-            $table->date('effective_from');
-            $table->unsignedTinyInteger('shift');
-            $table->timestamps();
-
-            $table->unique(['student_group_id', 'effective_from']);
         });
 
         Schema::create('subgroups', function (Blueprint $table) {
@@ -86,7 +75,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('subgroups');
-        Schema::dropIfExists('student_group_shifts');
         Schema::dropIfExists('student_groups');
         Schema::dropIfExists('disciplines');
         Schema::dropIfExists('teachers');

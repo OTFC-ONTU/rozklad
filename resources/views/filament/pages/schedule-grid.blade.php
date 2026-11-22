@@ -2,13 +2,13 @@
     use App\Enums\WeekParity;
     use App\Filament\Resources\ScheduleVersions\ScheduleVersionResource;
     use App\Filament\Resources\StudentGroups\StudentGroupResource;
-    use App\Models\SlotSetting;
+    use App\Models\ShiftSetting;
 
     $version = $this->currentVersion;
     $groups = $this->groups;
     $cells = $this->cells;
     $weekdays = $this->weekdays;
-    $pairs = range(1, SlotSetting::MAX_PAIRS);
+    $pairs = range(1, ShiftSetting::MAX_PAIRS);
 @endphp
 
 <x-filament-panels::page>

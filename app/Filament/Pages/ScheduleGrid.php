@@ -10,7 +10,7 @@ use App\Models\Discipline;
 use App\Models\Lesson;
 use App\Models\Room;
 use App\Models\ScheduleVersion;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Subgroup;
 use App\Models\Teacher;
@@ -119,7 +119,7 @@ class ScheduleGrid extends Page
     #[Computed]
     public function weekdays(): array
     {
-        $saturday = SlotSetting::where('saturday_enabled', true)->exists()
+        $saturday = ShiftSetting::where('first_saturday_enabled', true)->orWhere('second_saturday_enabled', true)->exists()
             || ($this->version && Lesson::where('schedule_version_id', $this->version)->where('weekday', Weekday::Saturday)->exists());
 
         return array_values(array_filter(Weekday::cases(), fn (Weekday $d) => $saturday || $d !== Weekday::Saturday));
@@ -244,7 +244,7 @@ class ScheduleGrid extends Page
     /** @return array<int, mixed> */
     private function lessonForm(): array
     {
-        $pairs = array_combine(range(1, SlotSetting::MAX_PAIRS), array_map(fn ($p) => "{$p} пара", range(1, SlotSetting::MAX_PAIRS)));
+        $pairs = array_combine(range(1, ShiftSetting::MAX_PAIRS), array_map(fn ($p) => "{$p} пара", range(1, ShiftSetting::MAX_PAIRS)));
 
         return [
             Hidden::make('lesson_id'),

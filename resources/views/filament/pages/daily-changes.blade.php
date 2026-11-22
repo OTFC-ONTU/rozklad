@@ -1,7 +1,6 @@
 @php
     use App\Enums\DayLessonStatus;
     use App\Enums\LessonFormat;
-    use App\Enums\Shift;
 
     $plan = $this->plan;
     $day = $plan->day;
@@ -60,9 +59,9 @@
         <div style="min-width: 8rem">
             <label for="dc-shift">Зміна</label>
             <x-filament::input.wrapper>
-                <x-filament::input.select id="dc-shift" wire:model.live="shift">
-                    @foreach (Shift::cases() as $s)
-                        <option value="{{ $s->value }}">{{ $s->label() }}</option>
+                <x-filament::input.select id="dc-shift" wire:model.live="shift" :disabled="! $plan->shifts->second_shift_enabled">
+                    @foreach ($plan->shifts->activeShifts() as $s)
+                        <option value="{{ $s->value }}" @selected($s === $this->currentShift())>{{ $s->label() }}</option>
                     @endforeach
                 </x-filament::input.select>
             </x-filament::input.wrapper>
@@ -76,6 +75,11 @@
             <span>✕ — скасувати пару</span>
         </div>
     </div>
+
+    @if ($day->isStudyDay && ! $plan->shifts->second_shift_enabled)
+        <x-filament::callout color="info" icon="heroicon-o-information-circle"
+            heading="2 зміна цього дня вимкнена: усі групи навчаються в 1 зміну за чинним розкладом." />
+    @endif
 
     @if ($plan->staleChanges->isNotEmpty())
         <x-filament::callout color="warning" icon="heroicon-o-exclamation-triangle"

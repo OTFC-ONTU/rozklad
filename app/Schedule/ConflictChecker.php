@@ -11,7 +11,7 @@ use App\Models\Lesson;
 use App\Models\LessonParticipant;
 use App\Models\Room;
 use App\Models\ScheduleVersion;
-use App\Models\SlotSetting;
+use App\Models\ShiftSetting;
 use App\Models\StudentGroup;
 use App\Models\Subgroup;
 use App\Models\Teacher;
@@ -100,7 +100,7 @@ class ConflictChecker
             $this->checkGroupsStudy($participants, $plan, $report);
         }
 
-        $this->checkSlots($draft, $participants, $date, $report);
+        $this->checkSlots($draft, $participants, $plan?->shifts ?? ShiftSetting::for($date), $plan !== null, $report);
         $this->checkGroups($participants, $concurrent, $report);
         $this->checkTeachers($teachers, $concurrent, $report);
         $this->checkTeacherConstraints($draft, $teachers, $date, $plan !== null, $report);
@@ -120,7 +120,7 @@ class ConflictChecker
      */
     private function participants(LessonDraft $draft): Collection
     {
-        $groups = StudentGroup::with('shiftChanges')
+        $groups = StudentGroup::query()
             ->findMany(array_column($draft->participants, 0))
             ->keyBy('id');
         $subgroups = Subgroup::findMany(array_filter(array_column($draft->participants, 1)))->keyBy('id');
@@ -140,8 +140,8 @@ class ConflictChecker
     /** Базова цілісність; якщо вона порушена, решту перевірок робити немає сенсу. */
     private function checkStructure(LessonDraft $draft, Collection $participants, ConflictReport $report): bool
     {
-        if ($draft->pair < 1 || $draft->pair > SlotSetting::MAX_PAIRS) {
-            $report->hard('invalid_pair', 'Номер пари має бути від 1 до '.SlotSetting::MAX_PAIRS.'.');
+        if ($draft->pair < 1 || $draft->pair > ShiftSetting::MAX_PAIRS) {
+            $report->hard('invalid_pair', 'Номер пари має бути від 1 до '.ShiftSetting::MAX_PAIRS.'.');
         }
 
         if ($participants->isEmpty()) {
@@ -174,16 +174,22 @@ class ConflictChecker
         }
     }
 
-    private function checkSlots(LessonDraft $draft, Collection $participants, CarbonInterface $date, ConflictReport $report): void
+    /**
+     * Слоти зміни групи. Шаблон перевіряється за зміною з розкладу, пара на дату — за фактичною
+     * (коли 2 зміну вимкнено, її групи цього дня навчаються в 1).
+     */
+    private function checkSlots(LessonDraft $draft, Collection $participants, ShiftSetting $shifts, bool $onDate, ConflictReport $report): void
     {
+        $shiftOf = fn (StudentGroup $g) => $onDate ? $shifts->shiftOf($g->course) : $shifts->scheduledShift($g->course);
+
         $participants
             ->map(fn (LessonParticipant $p) => $p->group)
             ->unique('id')
-            ->groupBy(fn (StudentGroup $g) => $g->shiftOn($date)->value)
-            ->each(function (Collection $groups) use ($draft, $date, $report) {
-                $shift = $groups->first()->shiftOn($date);
+            ->groupBy(fn (StudentGroup $g) => $shiftOf($g)->value)
+            ->each(function (Collection $groups) use ($draft, $shifts, $shiftOf, $report) {
+                $shift = $shiftOf($groups->first());
 
-                if (! SlotSetting::for($shift, $date)->allows($draft->weekday, $draft->pair)) {
+                if (! $shifts->allows($shift, $draft->weekday, $draft->pair)) {
                     $report->hard('slot_disabled', sprintf(
                         '%s, %d пара вимкнені для %s (%s).',
                         $draft->weekday->label(), $draft->pair, mb_strtolower($shift->label()), $groups->pluck('code')->implode(', '),

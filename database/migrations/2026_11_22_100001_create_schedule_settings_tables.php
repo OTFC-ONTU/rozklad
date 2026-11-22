@@ -8,16 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Налаштування слотів зміни, що діють з дати.
-        Schema::create('slot_settings', function (Blueprint $table) {
+        // Налаштування змін, що діють з дати: курси 2 зміни (решта — у 1),
+        // чи працює 2 зміна і які слоти доступні кожній зміні.
+        Schema::create('shift_settings', function (Blueprint $table) {
             $table->id();
-            $table->unsignedTinyInteger('shift');
-            $table->date('effective_from');
-            $table->boolean('saturday_enabled')->default(false);
-            $table->boolean('fourth_pair_enabled')->default(true);
+            $table->date('effective_from')->unique();
+            $table->json('second_shift_courses');
+            $table->boolean('second_shift_enabled')->default(true);
+            $table->boolean('first_saturday_enabled')->default(false);
+            $table->boolean('first_fourth_pair_enabled')->default(true);
+            $table->boolean('second_saturday_enabled')->default(false);
+            $table->boolean('second_fourth_pair_enabled')->default(true);
             $table->timestamps();
-
-            $table->unique(['shift', 'effective_from']);
         });
 
         // Матриця «день × пара × тиждень» обмежень викладача.
@@ -42,6 +44,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('teacher_constraints');
-        Schema::dropIfExists('slot_settings');
+        Schema::dropIfExists('shift_settings');
     }
 };
