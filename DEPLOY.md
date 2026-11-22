@@ -34,13 +34,16 @@ push у main → GitHub Actions (.github/workflows/deploy.yml)
    заповнити `APP_URL`, `DB_*`. `APP_KEY` — у «Виконавці»: `key:generate`.
 7. **Розгортання** → вимкнути крок `package.json` (збірка вже в гілці), сценарій:
    ```
+   /opt/plesk/php/8.3/bin/php artisan optimize:clear
    /opt/plesk/php/8.3/bin/php artisan migrate --seed --force
    /opt/plesk/php/8.3/bin/php artisan filament:assets
-   /opt/plesk/php/8.3/bin/php artisan optimize:clear
    /opt/plesk/php/8.3/bin/php artisan config:cache
    /opt/plesk/php/8.3/bin/php artisan route:cache
    /opt/plesk/php/8.3/bin/php artisan view:cache
    ```
+   `optimize:clear` — **першим**: інакше `migrate --seed` читає закешований конфіг попереднього
+   розгортання і не бачить свіжих змін у `.env` (напр. створить адміна зі старим паролем).
+   `storage:link` потрібен один раз — додати разово й прибрати.
 8. **Виконавець**: `storage:link`. Першого адміна створює `migrate --seed` із `ADMIN_EMAIL`/`ADMIN_PASSWORD` у `.env`
    (лише якщо такого email ще немає).
 9. **Автоматичне розгортання**: «Розгортання» → режим **«Автоматичний»**, скопіювати URL
@@ -57,5 +60,8 @@ push у main → GitHub Actions (.github/workflows/deploy.yml)
 - `https://ДОМЕН/build/commit.txt` = `git rev-parse origin/main`.
 - 404 на кроці вебхука = репозиторій у Plesk перестворено → оновити `PLESK_DEPLOY_WEBHOOK`.
 - Після зміни .env у Toolkit: «Виконавець» → `optimize:clear`, потім `config:cache`.
+- Не пускає в адмінку → пароль у `.env` зі спецсимволами без лапок: `#` обрізає решту рядка
+  (коментар). Писати `ADMIN_PASSWORD='...'`, потім видалити користувача в phpMyAdmin і розгорнути ще раз
+  (сидер не змінює наявного користувача).
 - 500 на `/` і `/admin`, але `/up` = 200 → зазвичай закешований конфіг без `.env`
   (розгортання пройшло до створення `.env`) або невірні `DB_*`. Виправити `.env` → «Розгорнути зараз».
