@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Перший запуск на MariaDB упав на задовгому імені індексу (65 > 64 символів), а DDL там
+        // не відкочується: лишилися порожні таблиці без запису в migrations. Прибираємо їх, щоб
+        // міграція пройшла заново. Записана міграція повторно не запускається, тож даних це не зачепить.
+        $this->down();
+
         // Версія тижневого шаблону «діє з».
         Schema::create('schedule_versions', function (Blueprint $table) {
             $table->id();
@@ -49,7 +54,7 @@ return new class extends Migration
             $table->foreignId('student_group_id')->constrained()->restrictOnDelete();
             $table->foreignId('subgroup_id')->nullable()->constrained()->restrictOnDelete();
 
-            $table->unique(['lesson_id', 'student_group_id', 'subgroup_id']);
+            $table->unique(['lesson_id', 'student_group_id', 'subgroup_id'], 'lesson_participants_unique');
         });
 
         Schema::create('lesson_teacher', function (Blueprint $table) {
