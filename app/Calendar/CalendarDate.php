@@ -2,6 +2,7 @@
 
 namespace App\Calendar;
 
+use App\Enums\Shift;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Models\Semester;
@@ -21,7 +22,14 @@ final readonly class CalendarDate
         public ?WeekParity $parity,
         public bool $isRescheduled = false,
         public ?string $note = null,
+        // Зміни, що навчаються цього дня (за зміною курсу з розкладу); null — усі. Суботи — за семестром.
+        public ?array $shifts = null,
     ) {}
+
+    public function hasShift(Shift $shift): bool
+    {
+        return $this->isStudyDay && ($this->shifts === null || in_array($shift, $this->shifts, true));
+    }
 
     /** «Субота 21.11.2026 — за розкладом вівторка, знаменник». */
     public function describe(): string
@@ -36,6 +44,12 @@ final readonly class CalendarDate
             $text .= ' — за розкладом: '.mb_strtolower($this->scheduleWeekday->label());
         }
 
-        return $text.($this->parity ? ', '.mb_strtolower($this->parity->label()) : '');
+        $text .= $this->parity ? ', '.mb_strtolower($this->parity->label()) : '';
+
+        if ($this->shifts !== null && count($this->shifts) === 1) {
+            $text .= ', лише '.mb_strtolower($this->shifts[0]->label());
+        }
+
+        return $text;
     }
 }

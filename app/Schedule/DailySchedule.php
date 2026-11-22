@@ -36,10 +36,11 @@ class DailySchedule
         $date = $day->date;
         $version = ScheduleVersion::effectiveOn($date);
 
+        $shifts = ShiftSetting::for($date);
         $groups = StudentGroup::all();
         $states = $this->calendar->groupStatesOn($groups, $date);
         $groups = $groups
-            ->filter(fn (StudentGroup $g) => $day->isStudyDay && $states[$g->id]->hasClasses())
+            ->filter(fn (StudentGroup $g) => $day->hasShift($shifts->scheduledShift($g->course)) && $states[$g->id]->hasClasses())
             ->keyBy('id');
 
         $template = ($day->isStudyDay && $version)
@@ -87,7 +88,7 @@ class DailySchedule
             $lessons->sortBy(fn (DayLesson $l) => [$l->pair(), $l->lesson->participants->first()?->group?->code])->values(),
             $groups,
             $stale,
-            ShiftSetting::for($date),
+            $shifts,
         );
     }
 

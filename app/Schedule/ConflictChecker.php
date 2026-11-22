@@ -5,6 +5,7 @@ namespace App\Schedule;
 use App\Calendar\AcademicCalendar;
 use App\Enums\ConstraintLevel;
 use App\Enums\LessonFormat;
+use App\Enums\Weekday;
 use App\Enums\WeekParity;
 use App\Models\Discipline;
 use App\Models\Lesson;
@@ -144,6 +145,10 @@ class ConflictChecker
             $report->hard('invalid_pair', 'Номер пари має бути від 1 до '.ShiftSetting::MAX_PAIRS.'.');
         }
 
+        if (! in_array($draft->weekday, Weekday::schoolDays(), true)) {
+            $report->hard('invalid_weekday', 'Розклад складається на Пн–Пт; субота йде за розкладом одного з цих днів.');
+        }
+
         if ($participants->isEmpty()) {
             $report->hard('no_participants', 'Не вказано групу або підгрупу.');
         }
@@ -168,6 +173,12 @@ class ConflictChecker
 
         foreach ($participants->pluck('group')->unique('id') as $group) {
             if (! $plan->groups->has($group->id)) {
+                if (! $plan->day->hasShift($plan->shifts->scheduledShift($group->course))) {
+                    $report->hard('group_not_studying', "{$group->code}: ".mb_strtolower($plan->shifts->scheduledShift($group->course)->label()).' цього дня не навчається.');
+
+                    continue;
+                }
+
                 $state = $calendar->groupStateOn($group, $plan->day->date);
                 $report->hard('group_not_studying', "{$group->code} цього дня: ".mb_strtolower($state->label()).'.');
             }
@@ -189,10 +200,10 @@ class ConflictChecker
             ->each(function (Collection $groups) use ($draft, $shifts, $shiftOf, $report) {
                 $shift = $shiftOf($groups->first());
 
-                if (! $shifts->allows($shift, $draft->weekday, $draft->pair)) {
+                if (! $shifts->allows($shift, $draft->pair)) {
                     $report->hard('slot_disabled', sprintf(
-                        '%s, %d пара вимкнені для %s (%s).',
-                        $draft->weekday->label(), $draft->pair, mb_strtolower($shift->label()), $groups->pluck('code')->implode(', '),
+                        '%d пара вимкнена для %s (%s).',
+                        $draft->pair, mb_strtolower($shift->label()), $groups->pluck('code')->implode(', '),
                     ));
                 }
             });

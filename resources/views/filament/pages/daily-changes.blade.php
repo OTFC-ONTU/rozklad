@@ -59,8 +59,8 @@
         <div style="min-width: 8rem">
             <label for="dc-shift">Зміна</label>
             <x-filament::input.wrapper>
-                <x-filament::input.select id="dc-shift" wire:model.live="shift" :disabled="! $plan->shifts->second_shift_enabled">
-                    @foreach ($plan->shifts->activeShifts() as $s)
+                <x-filament::input.select id="dc-shift" wire:model.live="shift" :disabled="count($plan->workingShifts()) < 2">
+                    @foreach ($plan->workingShifts() as $s)
                         <option value="{{ $s->value }}" @selected($s === $this->currentShift())>{{ $s->label() }}</option>
                     @endforeach
                 </x-filament::input.select>

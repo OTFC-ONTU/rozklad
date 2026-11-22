@@ -115,14 +115,11 @@ class ScheduleGrid extends Page
             ->get();
     }
 
-    /** @return list<Weekday> Субота — лише якщо її десь увімкнено або в ній уже є пари. */
+    /** @return list<Weekday> Пн–Пт: субота йде за розкладом одного з цих днів. */
     #[Computed]
     public function weekdays(): array
     {
-        $saturday = ShiftSetting::where('first_saturday_enabled', true)->orWhere('second_saturday_enabled', true)->exists()
-            || ($this->version && Lesson::where('schedule_version_id', $this->version)->where('weekday', Weekday::Saturday)->exists());
-
-        return array_values(array_filter(Weekday::cases(), fn (Weekday $d) => $saturday || $d !== Weekday::Saturday));
+        return Weekday::schoolDays();
     }
 
     /**
@@ -249,7 +246,7 @@ class ScheduleGrid extends Page
         return [
             Hidden::make('lesson_id'),
             Grid::make(3)->schema([
-                Select::make('weekday')->label('День')->options(Weekday::class)->required()->live(),
+                Select::make('weekday')->label('День')->options(Weekday::schoolDayOptions())->enum(Weekday::class)->required()->live(),
                 Select::make('pair')->label('Пара')->options($pairs)->required()->live(),
                 Select::make('week')->label('Тиждень')->options(WeekParity::class)->required()->live(),
             ]),

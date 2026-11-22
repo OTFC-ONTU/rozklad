@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\Shift;
-use App\Enums\Weekday;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,7 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  * навчаються в 2 зміну, решта — в 1. Якщо 2 зміну вимкнено (напр., 4 курс на практиці),
  * усі групи тимчасово навчаються в 1 зміну, а тижневий розклад не змінюється.
  *
- * Пн–Пт і пари 1–3 доступні завжди, субота і 4-а пара — за перемикачами зміни. 5-ї пари не буває.
+ * Пари 1–3 доступні завжди, 4-а — за перемикачем зміни. 5-ї пари не буває.
+ * Навчальні суботи обирають у семестрі (Semester::saturdayShifts).
  */
 class ShiftSetting extends Model
 {
@@ -22,16 +22,13 @@ class ShiftSetting extends Model
 
     protected $fillable = [
         'effective_from', 'second_shift_courses', 'second_shift_enabled',
-        'first_saturday_enabled', 'first_fourth_pair_enabled',
-        'second_saturday_enabled', 'second_fourth_pair_enabled',
+        'first_fourth_pair_enabled', 'second_fourth_pair_enabled',
     ];
 
     protected $attributes = [
         'second_shift_courses' => '[]',
         'second_shift_enabled' => true,
-        'first_saturday_enabled' => false,
         'first_fourth_pair_enabled' => true,
-        'second_saturday_enabled' => false,
         'second_fourth_pair_enabled' => true,
     ];
 
@@ -41,9 +38,7 @@ class ShiftSetting extends Model
             'effective_from' => 'date',
             'second_shift_courses' => 'array',
             'second_shift_enabled' => 'boolean',
-            'first_saturday_enabled' => 'boolean',
             'first_fourth_pair_enabled' => 'boolean',
-            'second_saturday_enabled' => 'boolean',
             'second_fourth_pair_enabled' => 'boolean',
         ];
     }
@@ -94,18 +89,12 @@ class ShiftSetting extends Model
         return array_values(array_filter(self::COURSES, fn (int $c) => $this->scheduledShift($c) === $shift));
     }
 
-    public function allows(Shift $shift, Weekday $weekday, int $pair): bool
+    public function allows(Shift $shift, int $pair): bool
     {
         if ($pair < 1 || $pair > self::MAX_PAIRS) {
             return false;
         }
 
-        $prefix = $shift === Shift::First ? 'first' : 'second';
-
-        if ($weekday === Weekday::Saturday && ! $this->{"{$prefix}_saturday_enabled"}) {
-            return false;
-        }
-
-        return $pair < 4 || $this->{"{$prefix}_fourth_pair_enabled"};
+        return $pair < 4 || ($shift === Shift::First ? $this->first_fourth_pair_enabled : $this->second_fourth_pair_enabled);
     }
 }

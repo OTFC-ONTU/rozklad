@@ -83,12 +83,13 @@ class DailyChanges extends Page
         }
     }
 
-    /** Обрана зміна; якщо цього дня вона не працює (2 зміну вимкнено) — 1. */
+    /** Обрана зміна; якщо цього дня вона не працює (2 зміну вимкнено, субота іншої зміни) — перша робоча. */
     public function currentShift(): Shift
     {
         $shift = Shift::from($this->shift);
+        $working = $this->plan->workingShifts();
 
-        return in_array($shift, $this->plan->shifts->activeShifts(), true) ? $shift : Shift::First;
+        return in_array($shift, $working, true) ? $shift : $working[0];
     }
 
     #[Computed]

@@ -54,7 +54,7 @@ class TeacherResource extends Resource
                 ->defaultItems(0)
                 ->addActionLabel('Додати обмеження')
                 ->schema([
-                    Select::make('weekday')->label('День')->options(Weekday::class)->required(),
+                    Select::make('weekday')->label('День')->options(Weekday::schoolDayOptions())->enum(Weekday::class)->required(),
                     Select::make('pair')->label('Пара')->placeholder('Увесь день')
                         ->options(array_combine(range(1, ShiftSetting::MAX_PAIRS), range(1, ShiftSetting::MAX_PAIRS))),
                     Select::make('week')->label('Тиждень')->options(WeekParity::class)->default(WeekParity::Every)->required(),

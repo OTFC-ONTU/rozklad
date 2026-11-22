@@ -65,6 +65,17 @@ final readonly class DayPlan
         return $group ? $this->shiftOfGroup($group) : null;
     }
 
+    /** @return list<Shift> зміни, що працюють цього дня (субота може бути лише для однієї) */
+    public function workingShifts(): array
+    {
+        $shifts = array_values(array_filter(
+            $this->shifts->activeShifts(),
+            fn (Shift $s) => $this->groups->contains(fn (StudentGroup $g) => $this->shiftOfGroup($g) === $s),
+        ));
+
+        return $shifts ?: $this->shifts->activeShifts();
+    }
+
     /** @return Collection<int, DayLesson> */
     public function inShift(Shift $shift): Collection
     {
