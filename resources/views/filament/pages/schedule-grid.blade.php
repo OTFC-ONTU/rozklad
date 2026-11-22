@@ -74,6 +74,7 @@
                 </x-filament::input.select>
             </x-filament::input.wrapper>
         </div>
+        <x-filament::badge color="info" icon="heroicon-o-calendar" style="align-self: center">Сьогодні: {{ $this->today }}</x-filament::badge>
         <div class="sg-legend">
             <span>Пунктир — чисельник / знаменник</span>
             <span><span style="border-left: 3px solid rgb(220 38 38); padding-left: .25rem">збережено попри конфлікт</span></span>

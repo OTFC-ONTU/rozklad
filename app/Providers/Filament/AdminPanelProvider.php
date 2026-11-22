@@ -28,7 +28,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->navigationGroups(['Розклад', 'Довідники', 'Налаштування'])
+            ->navigationGroups(['Розклад', 'Календар', 'Довідники', 'Налаштування'])
             ->colors([
                 'primary' => Color::Amber,
             ])

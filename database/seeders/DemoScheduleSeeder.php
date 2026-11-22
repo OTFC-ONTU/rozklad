@@ -2,11 +2,17 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CalendarDayKind;
+use App\Enums\GroupActivityKind;
 use App\Enums\RoomType;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
+use App\Models\AcademicYear;
 use App\Models\Building;
+use App\Models\CalendarDay;
 use App\Models\Discipline;
+use App\Models\GroupActivity;
+use App\Models\PracticeType;
 use App\Models\Room;
 use App\Models\ScheduleVersion;
 use App\Models\StudentGroup;
@@ -51,6 +57,8 @@ class DemoScheduleSeeder extends Seeder
         $sub1 = $kb06->subgroups()->firstOrCreate(['division' => 'Інформатика', 'name' => '1'], ['students_count' => 16]);
         $sub2 = $kb06->subgroups()->firstOrCreate(['division' => 'Інформатика', 'name' => '2'], ['students_count' => 16]);
 
+        $this->seedCalendar([$g10, $g12], $kb06);
+
         $version = ScheduleVersion::firstOrCreate(['title' => 'Демо: І семестр 2026–2027'], ['effective_from' => '2026-09-23']);
 
         if ($version->lessons()->exists()) {
@@ -81,6 +89,32 @@ class DemoScheduleSeeder extends Seeder
         // Класна година — фіксований блок у всіх груп.
         foreach ([$g10, $g12, $kb06] as $group) {
             $add(Weekday::Wednesday, 4, ['title' => 'Класна година', 'isFixedBlock' => true, 'participants' => [[$group->id, null]]]);
+        }
+    }
+
+    /** @param  list<StudentGroup>  $fourthCourse */
+    private function seedCalendar(array $fourthCourse, StudentGroup $kb06): void
+    {
+        $year = AcademicYear::firstOrCreate(['title' => '2026–2027'], ['starts_on' => '2026-09-01', 'ends_on' => '2027-06-30']);
+        $year->semesters()->firstOrCreate(['number' => 1], ['starts_on' => '2026-09-01', 'ends_on' => '2026-12-31', 'first_week_parity' => WeekParity::Numerator]);
+        $year->semesters()->firstOrCreate(['number' => 2], ['starts_on' => '2027-01-25', 'ends_on' => '2027-06-30', 'first_week_parity' => WeekParity::Numerator]);
+
+        CalendarDay::firstOrCreate(['date' => '2026-10-01'], ['kind' => CalendarDayKind::Holiday, 'note' => 'День захисників і захисниць']);
+        CalendarDay::firstOrCreate(['date' => '2026-11-21'], [
+            'kind' => CalendarDayKind::Working, 'follows_weekday' => Weekday::Tuesday,
+            'follows_parity' => WeekParity::Denominator, 'note' => 'Відпрацювання',
+        ]);
+
+        if (GroupActivity::exists()) {
+            return;
+        }
+
+        $practice = PracticeType::firstOrCreate(['name' => 'Навчальна ознайомча за фахом'], ['short_name' => 'НОП', 'color' => '#60a5fa']);
+        $kb06->activities()->create(['kind' => GroupActivityKind::Practice, 'practice_type_id' => $practice->id, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-25']);
+
+        foreach ($fourthCourse as $group) {
+            $group->activities()->create(['kind' => GroupActivityKind::CreditWeek, 'starts_on' => '2026-12-14', 'ends_on' => '2026-12-18']);
+            $group->activities()->create(['kind' => GroupActivityKind::Session, 'starts_on' => '2026-12-21', 'ends_on' => '2026-12-31']);
         }
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Calendar\AcademicCalendar;
 use App\Enums\LessonFormat;
 use App\Enums\Weekday;
 use App\Enums\WeekParity;
@@ -84,6 +85,13 @@ class ScheduleGrid extends Page
     public function currentVersion(): ?ScheduleVersion
     {
         return $this->version ? ScheduleVersion::find($this->version) : null;
+    }
+
+    /** «Понеділок 23.11.2026, чисельник» — для індикатора над сіткою. */
+    #[Computed]
+    public function today(): string
+    {
+        return app(AcademicCalendar::class)->day(now())->describe();
     }
 
     /** @return Collection<int, string> */

@@ -34,6 +34,16 @@ class ScheduleVersion extends Model
         return $this->hasMany(Lesson::class);
     }
 
+    /** Опублікована версія, що діє на дату. */
+    public static function effectiveOn(CarbonInterface $date): ?self
+    {
+        return static::query()
+            ->where('status', ScheduleVersionStatus::Published)
+            ->whereDate('effective_from', '<=', $date)
+            ->orderByDesc('effective_from')
+            ->first();
+    }
+
     public function isDraft(): bool
     {
         return $this->status === ScheduleVersionStatus::Draft;

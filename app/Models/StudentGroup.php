@@ -28,6 +28,11 @@ class StudentGroup extends Model
         return $this->hasMany(Subgroup::class);
     }
 
+    public function activities(): HasMany
+    {
+        return $this->hasMany(GroupActivity::class)->orderBy('starts_on');
+    }
+
     public function shiftChanges(): HasMany
     {
         return $this->hasMany(StudentGroupShift::class);
